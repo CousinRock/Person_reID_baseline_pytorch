@@ -53,7 +53,7 @@ parser.add_argument('--DG', action='store_true', help='use extra DG-Market Datas
 # optimizer
 parser.add_argument('--lr', default=0.05, type=float, help='learning rate')
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='Weight decay. More Regularization Smaller Weight.')
-parser.add_argument('--total_epoch', default=60, type=int, help='total training epoch')
+parser.add_argument('--total_epoch', default=2, type=int, help='total training epoch')#训练次数
 parser.add_argument('--fp16', action='store_true', help='use float16 instead of float32, which will save about 50%% memory' )
 parser.add_argument('--cosine', action='store_true', help='use cosine lrRate' )
 parser.add_argument('--FSGD', action='store_true', help='use fused sgd, which will speed up trainig slightly. apex is needed.' )
@@ -86,6 +86,8 @@ parser.add_argument('--aiter', default=10, type=float, help='use adv loss with i
 
 opt = parser.parse_args()
 
+from torchvision import models
+model = models.resnet50(pretrained=True)
 fp16 = opt.fp16
 data_dir = opt.data_dir
 name = opt.name
@@ -97,10 +99,14 @@ for str_id in str_ids:
         gpu_ids.append(gid)
 opt.gpu_ids = gpu_ids
 # set gpu ids
-if len(gpu_ids)>0:
+if len(gpu_ids)>0 and torch.cuda.is_available():
     #torch.cuda.set_device(gpu_ids[0])
     cudnn.enabled = True
     cudnn.benchmark = True
+    model = model.cuda()
+else:
+    # CPU 相关代码
+    model = model.cpu()
 ######################################################################
 # Load Data
 # ---------
@@ -164,8 +170,7 @@ image_datasets['val'] = datasets.ImageFolder(os.path.join(data_dir, 'val'),
                                           data_transforms['val'])
 
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=True, num_workers=2, pin_memory=True,
-                                             prefetch_factor=2, persistent_workers=True) # 8 workers may work faster
+                                             shuffle=True, num_workers=0, pin_memory=True) # 改为 num_workers=0
               for x in ['train', 'val']}
 # Use extra DG-Market Dataset for training. Please download it from https://github.com/NVlabs/DG-Net#dg-market.
 if opt.DG:
@@ -176,8 +181,9 @@ if opt.DG:
         
     image_datasets['DG'] = DGFolder(os.path.join('../DG-Market' ),
                                           data_transforms['train'])
-    dataloaders['DG'] = torch.utils.data.DataLoader(image_datasets['DG'], batch_size = max(8, opt.batchsize//2),
-                                             shuffle=True, num_workers=2, pin_memory=True)
+    dataloaders['DG'] = torch.utils.data.DataLoader(image_datasets['DG'], 
+                                             batch_size = max(8, opt.batchsize//2),
+                                             shuffle=True, num_workers=0, pin_memory=True) # 改为 num_workers=0
     DGloader_iter = enumerate(dataloaders['DG'])
 
 dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
@@ -216,9 +222,10 @@ def fliplr(img):
 
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
+    
+    # 初始化 last_model_wts
+    last_model_wts = model.state_dict()  # 添加这行，确保变量被初始化
 
-    #best_model_wts = model.state_dict()
-    #best_acc = 0.0
     warm_up = 0.1 # We start from the 0.1*lrRate
     warm_iteration = round(dataset_sizes['train']/opt.batchsize)*opt.warm_epoch # first 5 epoch
     embedding_size = model.classifier.linear_num
@@ -241,9 +248,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
         criterion_sphere = losses.SphereFaceLoss(num_classes=opt.nclasses, embedding_size=embedding_size, margin=4)
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
-        # print('-' * 10)
         
-        # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
                 model.train(True)  # Set model to training mode
@@ -417,14 +422,15 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
             
             y_loss[phase].append(epoch_loss)
             y_err[phase].append(1.0-epoch_acc)            
-            # deep copy the model
-            if phase == 'val' and epoch%10 == 9:
-                last_model_wts = model.state_dict()
-                if len(opt.gpu_ids)>1:
-                    save_network(model.module, opt.name, epoch+1)
-                else:
-                    save_network(model, opt.name, epoch+1)
+            # 修改保存模型的条件
             if phase == 'val':
+                # 每个 epoch 结束时都保存模型
+                last_model_wts = model.state_dict()
+                if epoch%10 == 9:  # 每10个epoch保存一次checkpoint
+                    if len(opt.gpu_ids)>1:
+                        save_network(model.module, opt.name, epoch+1)
+                    else:
+                        save_network(model, opt.name, epoch+1)
                 draw_curve(epoch)
             if phase == 'train':
                 scheduler.step()

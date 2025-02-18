@@ -5,7 +5,7 @@ import numpy as np
 import os
 from torchvision import datasets
 import matplotlib
-matplotlib.use('agg')
+matplotlib.use('Agg')  # 使用 Agg 后端，适合非交互式环境
 import matplotlib.pyplot as plt
 #######################################################################
 # Evaluate
@@ -25,7 +25,6 @@ def imshow(path, title=None):
     plt.imshow(im)
     if title is not None:
         plt.title(title)
-    plt.pause(0.001)  # pause a bit so that plots are updated
 
 ######################################################################
 result = scipy.io.loadmat('pytorch_result.mat')
@@ -84,8 +83,7 @@ query_path, _ = image_datasets['query'].imgs[i]
 query_label = query_label[i]
 print(query_path)
 print('Top 10 images are as follow:')
-try: # Visualize Ranking Result 
-    # Graphical User Interface is needed
+try:
     fig = plt.figure(figsize=(16,4))
     ax = plt.subplot(1,11,1)
     ax.axis('off')
@@ -101,10 +99,17 @@ try: # Visualize Ranking Result
         else:
             ax.set_title('%d'%(i+1), color='red')
         print(img_path)
-except RuntimeError:
+    
+    # 保存图像并显示保存路径
+    save_path = "rank_result.jpg"
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    print(f"\n结果图片已保存到: {os.path.abspath(save_path)}")
+    
+except RuntimeError as e:
+    print(f"Error: {e}")
+    print('无法显示图像，但已保存结果到文件')
     for i in range(10):
-        img_path = image_datasets.imgs[index[i]]
+        img_path = image_datasets['gallery'].imgs[index[i]]
         print(img_path[0])
-    print('If you want to see the visualization of the ranking result, graphical user interface is needed.')
 
-fig.savefig("show.png")
+plt.close()  # 清理资源

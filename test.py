@@ -144,11 +144,11 @@ data_dir = test_dir
 if opt.multi:
     image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query','multi-query']}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=False, num_workers=16) for x in ['gallery','query','multi-query']}
+                                             shuffle=False, num_workers=0) for x in ['gallery','query','multi-query']}
 else:
     image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query']}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=False, num_workers=16) for x in ['gallery','query']}
+                                             shuffle=False, num_workers=0) for x in ['gallery','query']}
 class_names = image_datasets['query'].classes
 use_gpu = torch.cuda.is_available()
 
@@ -183,9 +183,8 @@ def fliplr(img):
     return img_flip
 
 def extract_feature(model,dataloaders):
-    #features = torch.FloatTensor()
-    # count = 0
-    pbar = tqdm()
+    pbar = tqdm(total=len(dataloaders.dataset))  # 添加总数
+    print(f"Processing {len(dataloaders.dataset)} images...")  # 打印总数
     if opt.linear_num <= 0:
         if opt.use_swin or opt.use_swinv2 or opt.use_dense or opt.use_convnext:
             opt.linear_num = 1024
@@ -199,9 +198,7 @@ def extract_feature(model,dataloaders):
     for iter, data in enumerate(dataloaders):
         img, label = data
         n, c, h, w = img.size()
-        # count += n
-        # print(count)
-        pbar.update(n)
+        pbar.update(n)  # 更新进度条
         ff = torch.FloatTensor(n,opt.linear_num).zero_().cuda()
 
         if opt.PCB:
@@ -326,7 +323,9 @@ print(model)
 # Extract feature
 since = time.time()
 with torch.no_grad():
+    print('Start extracting gallery features...')
     gallery_feature = extract_feature(model,dataloaders['gallery'])
+    print('Start extracting query features...')
     query_feature = extract_feature(model,dataloaders['query'])
     if opt.multi:
         mquery_feature = extract_feature(model,dataloaders['multi-query'])
@@ -339,7 +338,43 @@ scipy.io.savemat('pytorch_result.mat',result)
 
 print(opt.name)
 result = './model/%s/result.txt'%opt.name
-os.system('python evaluate_gpu.py | tee -a %s'%result)
+
+# 修改这行，不使用 tee 命令
+try:
+    # 将输出同时写入文件和控制台
+    import sys
+    from contextlib import contextmanager
+    
+    @contextmanager
+    def both_stdout_and_file(filename):
+        class MultipleStreams:
+            def __init__(self, streams):
+                self.streams = streams
+            
+            def write(self, data):
+                for stream in self.streams:
+                    stream.write(data)
+                    stream.flush()
+            
+            def flush(self):
+                for stream in self.streams:
+                    stream.flush()
+        
+        with open(filename, 'a') as file:
+            original_stdout = sys.stdout
+            sys.stdout = MultipleStreams([sys.stdout, file])
+            try:
+                yield
+            finally:
+                sys.stdout = original_stdout
+    
+    # 运行评估并同时输出到文件和控制台
+    with both_stdout_and_file(result):
+        import evaluate_gpu
+except Exception as e:
+    print(f"Error during evaluation: {e}")
+    # 如果出错，直接运行评估
+    import evaluate_gpu
 
 if opt.multi:
     result = {'mquery_f':mquery_feature.numpy(),'mquery_label':mquery_label,'mquery_cam':mquery_cam}

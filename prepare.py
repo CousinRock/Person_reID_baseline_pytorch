@@ -1,16 +1,21 @@
 import os
-from shutil import copyfile
+from shutil import copyfile, move
 
-download_path = '../Market' # Please not change.
-download_path2 = '../Market-1501-v15.09.15' # You only need to change this line to your dataset download path
 
+download_path = './Market2' # Please not change.
+download_path2 = r'./data/Market-1501-v15.09.15/Market-1501-v15.09.15' # You only need to change this line to your dataset download path
+# download_path2 = './data/DukeMTMC-reID//DukeMTMC-reID'
 if not os.path.isdir(download_path):
     if os.path.isdir(download_path2):
-        os.system('mv %s %s'%(download_path2, download_path)) # rename
+        # os.system('mv %s %s'%(download_path2, download_path)) # rename  Linux
+        # 使用 shutil.move 代替系统命令
+        os.makedirs(os.path.dirname(download_path), exist_ok=True)  # 确保目标父目录存在
+        move(download_path2, download_path)
     else:
         print('please change the download_path')
 
 save_path = download_path + '/pytorch'
+print(save_path)
 if not os.path.isdir(save_path):
     os.mkdir(save_path)
 #-----------------------------------------

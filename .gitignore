@@ -39,3 +39,4 @@ GPU-Re-Ranking/extension/propagation/dist
 *.npy
 *.pt
 *.pth
+1.py
