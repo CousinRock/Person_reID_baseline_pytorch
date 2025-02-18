@@ -16,7 +16,9 @@ We could use this tech to help people. Check the great video by Nvidia. (https:/
 Person re-identification, 行人重识别, 人の再識別, 보행자 재 식별, Réidentification des piétons, Ri-identificazione pedonale, Fußgänger-Neuidentifizierung, إعادة تحديد المشاة, Re-identificación de peatones
 
 ## Ubuntu Usage
-Assuming you have an Ubuntu Window System,
+**If the machine has installed cuda toolkit and nvidia driver (like our school desktops), you do not need any root permission, like sudo, during our tutorial. If you are using your own machine, I suggest to see this answer to install cuda first. https://askubuntu.com/questions/1077061/how-do-i-install-nvidia-and-cuda-drivers-into-ubuntu**
+
+Assuming you have an Ubuntu Desktop System,
 
 Press `Ctrl+Alt+T` to open a new terminal. 
 
@@ -38,6 +40,17 @@ ls # to show all stuff in the \home\user\Downloads
 cd ..   #Back to the upper folder. You are at \home\user again.
 ```
 
+## Windows Usage (Not Recommended)
+We do not suggest using Windows considering lower GPU usage and unexpected errors.
+If you still want to use Windows, you should keep two points in mind. 
+- Path: Ubuntu path is `\home\zzd\` but Windows path is `D://Downloads/` using `/` instead of `\` 
+- Multi-thread: Pytorch does not support multiple thread to read the data. Please set `num_workers=0` during trainning and test.
+
+Please also refer to https://github.com/layumi/Person_reID_baseline_pytorch/issues/34 
+
+## Colab Usage (Not Recommended)
+Please refer to https://github.com/layumi/Person_reID_baseline_pytorch/tree/master/colab 
+
 ## Prerequisites
 - Download my repo
 ```bash
@@ -48,6 +61,13 @@ cd Person_reID_baseline_pytorch
 - Install required packages
 ```bash
 pip install -r requirements.txt
+```
+- [Optional] No pip or python?? You may install it without sudo permission by installing miniconda:
+```bash
+mkdir -p ~/miniconda3
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+rm ~/miniconda3/miniconda.sh
 ```
 - [Optional] You may skip it. Usually it comes with pytorch. Install Torchvision from the source
 ```bash
@@ -125,6 +145,8 @@ Now we have successfully prepared the data for `torchvision` to read the data.
 ```
 For Market-1501, the image name contains the identity label and camera id. Check the naming rule at [here](http://www.liangzheng.org/Project/project_reid.html).
 
+For DukeMTMC, you can use my modified `python prepare_Duke.py`.
+
 ### Part 1.2: Build Neural Network (`model.py`)
 We can use the pretrained networks, such as `AlexNet`, `VGG16`, `ResNet` and `DenseNet`. Generally, the pretrained networks help to achieve a better performance, since it preserves some good visual patterns from ImageNet [1].
 
@@ -138,7 +160,7 @@ You can simply check the structure of the model by:
 print(model)
 ```
 
-But we need to modify the networks a little bit. There are 751 classes (different people) in Market-1501, which is different with 1,000 classes in ImageNet. So here we change the model to use our classifier.
+But we need to modify the networks a little bit. There are 751 classes (different people) in Market-1501, which is different with 1,000 classes in ImageNet. So here we have changed the model to use our classifier (I have modified it for you, so you do not need to modify the code. Please just take a look).
 
 ```python
 import torch
@@ -147,7 +169,7 @@ from torchvision import models
 
 # Define the ResNet50-based Model
 class ft_net(nn.Module):
-    def __init__(self, class_num = 751):
+    def __init__(self, class_num = 751):   # Check this line. 
         super(ft_net, self).__init__()
         #load the model
         model_ft = models.resnet50(pretrained=True) 
@@ -196,7 +218,22 @@ python train.py --gpu_ids 0 --name ft_ResNet50 --train_all --batchsize 32  --dat
 
 `--erasing_p` random erasing probability.
 
-Let's look at what we do in the `train.py`.
+If you meet error `python 3.12+ does not support dynamic.`, we could (1) delete the compile operation, which requires dynamic in both training and test code (https://github.com/layumi/Person_reID_baseline_pytorch/blob/master/train.py#L512 and https://github.com/layumi/Person_reID_baseline_pytorch/blob/master/test.py#L167). 
+(2) Or creat a new environment with python 3.9 by 
+```
+conda create --name python39 python=3.9
+conda activate python39
+```
+and then reinstall all mentioned requirements again. 
+
+Open another terminal to see the GPU usage. 
+```bash
+nvidia-smi # show dense version
+pip install gpustat
+gpustat # show brief version
+```
+
+Now let's look at what we do in the `train.py`.
 The first thing is how to read data and their labels from the prepared folder.
 Using `torch.utils.data.DataLoader`, we can obtain two iterators `dataloaders['train']` and `dataloaders['val']` to read data and label.
 ```python
@@ -368,12 +405,17 @@ except RuntimeError:
 ```
 
 ## Part 4: Your Turn. 
+For the assignment, you are free to select any related topics. Here I just give some basic ideas. You do not need to finish all.
 
-- Market-1501 is a dataset collected at Tsinghua University in summer.
+- Try different datasets. Market-1501 is a dataset collected at Tsinghua University in summer.
 
 Let's try another dataset called DukeMTMC-reID, which is collected at Duke University in winter.
 
-You may download the dataset at [Here](http://vision.cs.duke.edu/DukeMTMC/data/misc/DukeMTMC-reID.zip) [GoogleDriver](https://drive.google.com/open?id=1jjE85dRCMOgRtvJ5RQV9-Afs-2_5dY3O) or ([BaiduYun](https://pan.baidu.com/s/1jS0XM7Var5nQGcbf9xUztw) password: bhbh). Try it by yourself.
+You may download the dataset at [GoogleDriver](https://drive.google.com/open?id=1jjE85dRCMOgRtvJ5RQV9-Afs-2_5dY3O) or ([BaiduYun](https://pan.baidu.com/s/1jS0XM7Var5nQGcbf9xUztw) password: bhbh) or using the following bash. Try it by yourself.
+```bash
+gdown 1jjE85dRCMOgRtvJ5RQV9-Afs-2_5dY3O
+python prepare_Duke.py # please also modify the path. 
+```
 
 The dataset is quite similar to Market-1501. You may also check with the state-of-the-art results at [Here](https://github.com/layumi/DukeMTMC-reID_evaluation/tree/master/State-of-the-art). 
 
@@ -381,11 +423,15 @@ The dataset is quite similar to Market-1501. You may also check with the state-o
 + Quick Question. Could we directly apply the model trained on Market-1501 to DukeMTMC-reID? Why?
 ```
 
+- Try different backbones. https://github.com/layumi/Person_reID_baseline_pytorch/tree/master?tab=readme-ov-file#trained-model
+
+- Try different loss compositions. https://github.com/layumi/Person_reID_baseline_pytorch/tree/master?tab=readme-ov-file#different-losses
+
 - Try verification + identification loss. You may check the code at [Here](https://github.com/layumi/Person-reID-verification).
 
 - Try Triplet Loss.
 Triplet loss is another widely-used objective. You may check the code in https://github.com/layumi/Person-reID-triplet-loss. 
-I write the code in a similar manner, so let's find what I changed. 
+I write the code in a similar manner, so let's find what I changed.
 
 ## Part5: Other Related Works
 - The pedestrian has some specific attributes, e.g., gender, carrying. They can help the feature learning. We annotate the ID-level attributes for Market-1501 and DukeMTMC-reID. You could check [this paper](https://arxiv.org/abs/1703.07220).
